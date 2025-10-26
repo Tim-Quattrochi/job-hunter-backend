@@ -214,13 +214,69 @@ These test endpoints verify that:
 
 ### Upstash Redis (Task Queue Broker)
 
-**Note:** For local development, we use the Redis container from Docker Compose. Upstash Redis will be configured for production deployment in a future story.
+**Purpose:** Upstash Redis serves as the message broker for Celery task queues in production. For local development, we use the Redis container from Docker Compose.
 
-For local development, the `.env` should have:
+#### Setup Instructions
+
+1. Sign up for an Upstash account at [https://upstash.com](https://upstash.com)
+2. Create a new Redis database:
+   - Name: "job-hunter-celery"
+   - Region: Choose closest to your backend hosting (or use default)
+   - Type: Regional (recommended for production)
+3. Copy the connection string from the Upstash dashboard
+4. The connection string format will be: `rediss://default:password@host:port`
+   - Note: `rediss://` with double 's' indicates SSL/TLS encryption (required by Upstash)
+
+#### Environment Configuration
+
+**For local development** (using Docker Compose Redis):
 
 ```bash
 REDIS_URL=redis://redis:6379/0
 ```
+
+**For production** (using Upstash):
+
+```bash
+REDIS_URL=rediss://default:your_password@your-host.upstash.io:port
+```
+
+**Testing Upstash connection:**
+
+To test the Upstash connection locally before deploying:
+
+1. Temporarily update `.env` with your Upstash connection string
+2. Start the Celery worker:
+
+   ```bash
+   celery -A app.celery_app worker --loglevel=info
+   ```
+
+3. Trigger a test task:
+
+   ```bash
+   # In a Python shell or script
+   from app.celery_app import test_task
+   test_task.delay("Hello Upstash!")
+   ```
+
+4. Verify in the Upstash dashboard:
+   - Check the "Metrics" tab for task execution
+   - Monitor queue depth and throughput
+   - View recent commands
+
+5. Switch back to local Redis for development:
+
+   ```bash
+   REDIS_URL=redis://redis:6379/0
+   ```
+
+**Important Notes:**
+
+- Use local Docker Redis for development (faster, no network latency)
+- Use Upstash for production and staging environments
+- The Celery worker automatically connects to the Redis URL specified in `.env`
+- Upstash provides metrics and monitoring in their dashboard
 
 ## Documentation Links
 
@@ -244,8 +300,18 @@ REDIS_URL=redis://redis:6379/0
 
 ### Redis Connection Issues
 
+**Local Docker Redis:**
+
 - **Error: "connection timeout"** → Ensure Redis container is running with `docker-compose ps`
-- **Error: "authentication failed"** → Verify `REDIS_URL` matches the Docker Compose configuration
+- **Error: "authentication failed"** → Verify `REDIS_URL` matches the Docker Compose configuration (`redis://redis:6379/0`)
+- **Error: "connection refused"** → Check if Redis container is healthy with `docker-compose logs redis`
+
+**Upstash Redis:**
+
+- **Error: "connection timeout"** → Verify using `rediss://` (with double 's' for SSL) in connection string
+- **Error: "authentication failed"** → Check password in connection string from Upstash dashboard
+- **Error: "READONLY"** → Using read replica instead of primary (verify connection string)
+- **Error: "SSL/TLS error"** → Ensure connection string uses `rediss://` (SSL required by Upstash)
 
 ## Next Steps
 

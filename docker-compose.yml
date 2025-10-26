@@ -1,3 +1,5 @@
+# Docker Compose configuration for local development
+# For production, deploy to Railway/Render and use Upstash Redis
 services:
   web:
     build: .
@@ -7,6 +9,7 @@ services:
     env_file:
       - .env
     environment:
+      # Use REDIS_URL from .env, default to local Redis if not set
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - ./app:/app/app
@@ -19,12 +22,14 @@ services:
     env_file:
       - .env
     environment:
+      # Use REDIS_URL from .env, default to local Redis if not set
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - ./app:/app/app
     depends_on:
       - redis
 
+  # Local Redis for development (use Upstash Redis in production)
   redis:
     image: redis:7-alpine
     ports:
