@@ -157,7 +157,60 @@ Expected response: `{"status":"connected","database":"neondb"}`
 
 **Testing the integration:**
 
-Full Stack Auth integration will be implemented in Story 1.1. For now, verify that credentials are correctly configured.
+Test endpoints are available for verifying Stack Auth configuration:
+
+1. **Check Stack Auth configuration status:**
+
+   ```bash
+   curl http://localhost:8000/api/auth/health
+   ```
+
+   Expected response:
+
+   ```json
+   {
+     "status": "healthy",
+     "service": "stack_auth",
+     "message": "Stack Auth is configured"
+   }
+   ```
+
+2. **Verify a JWT token** (requires a valid Stack Auth token):
+
+   ```bash
+   curl -H "Authorization: Bearer <your-jwt-token>" http://localhost:8000/api/auth/verify
+   ```
+
+   Expected response (if token is valid):
+
+   ```json
+   {
+     "status": "valid",
+     "message": "Token verified successfully",
+     "payload": {
+       "sub": "user-id-123",
+       "email": "user@example.com",
+       ...
+     }
+   }
+   ```
+
+   To obtain a test JWT token:
+   - You'll need to implement the frontend login flow (Story 1.1)
+   - Alternatively, use the Stack Auth dashboard to generate a test token
+   - Or use a tool like jwt.io to inspect tokens (for debugging only)
+
+3. **View all API endpoints:**
+
+   Visit the interactive API documentation at <http://localhost:8000/docs>
+
+**Note:** Full Stack Auth integration (user registration, login flows, protected routes) will be implemented in Story 1.1.
+
+These test endpoints verify that:
+
+- Stack Auth credentials are properly configured
+- JWT tokens can be verified using Stack Auth's public keys
+- The backend can communicate with Stack Auth's JWKS endpoint
 
 ### Upstash Redis (Task Queue Broker)
 

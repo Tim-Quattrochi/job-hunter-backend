@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.api.routes.db_health import create_db_health_router
+from app.api.routes.auth_verify import create_auth_verify_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -73,6 +74,11 @@ app.add_middleware(
 # Story 0.3: Include database health check router
 db_health_router = create_db_health_router(get_db)
 app.include_router(db_health_router)
+
+# Story 0.3: Include Stack Auth verification router (test endpoint)
+auth_verify_router = create_auth_verify_router()
+app.include_router(auth_verify_router)
+
 @app.get("/", tags=["Health"])
 async def read_root() -> dict[str, str]:
     """Return basic API metadata for quick diagnostics."""

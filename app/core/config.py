@@ -9,6 +9,8 @@ from typing import List
 from dotenv import load_dotenv
 
 
+
+
 def _split_origins(raw_origins: str | None) -> List[str]:
     """Split a comma-delimited list of origins into a cleaned list."""
     if not raw_origins:
@@ -23,8 +25,8 @@ class Settings:
         load_dotenv()
         self.database_url: str = os.getenv("DATABASE_URL", "")
         self.redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        self.stack_auth_project_id: str | None = os.getenv("STACK_AUTH_PROJECT_ID")
-        self.stack_auth_secret_key: str | None = os.getenv("STACK_AUTH_SECRET_KEY")
+        self.stack_auth_project_id: str | None = os.getenv("NEXT_PUBLIC_STACK_PROJECT_ID")
+        self.stack_auth_secret_key: str | None = os.getenv("STACK_SECRET_SERVER_KEY")
         self._cors_origins_raw: str | None = os.getenv("CORS_ORIGINS")
 
     @property
