@@ -16,6 +16,10 @@ from jose import jwt, jwk
 from jose.exceptions import JWTError
 from typing import Dict, Any
 from functools import lru_cache
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 
@@ -181,3 +185,93 @@ def extract_bearer_token(authorization_header: str | None) -> str:
         )
 
     return parts[1]
+
+
+# Story 1.1: FastAPI Dependencies for Protected Endpoints
+
+# HTTP Bearer security scheme for Swagger UI
+security = HTTPBearer()
+
+
+async def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
+    """FastAPI dependency to get the current authenticated user ID.
+
+    This dependency:
+    1. Extracts the JWT token from the Authorization header
+    2. Verifies the token using Stack Auth's JWKS
+    3. Returns the user ID from the token's 'sub' claim
+
+    Args:
+        credentials: HTTP Bearer credentials from the Authorization header
+
+    Returns:
+        The user ID (from JWT 'sub' claim)
+
+    Raises:
+        HTTPException: 401 if token is invalid or missing
+
+    Example:
+        ```python
+        @app.get("/api/me")
+        async def get_me(user_id: str = Depends(get_current_user_id)):
+            return {"user_id": user_id}
+        ```
+    """
+    try:
+        token = credentials.credentials
+        payload = await verify_jwt_token(token)
+        user_id = payload.get("sub")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token missing 'sub' (user ID) claim",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return user_id
+
+    except JWTVerificationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+async def get_current_token_payload(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> Dict[str, Any]:
+    """FastAPI dependency to get the full JWT payload.
+
+    Use this when you need access to additional token claims beyond just the user ID.
+
+    Args:
+        credentials: HTTP Bearer credentials from the Authorization header
+
+    Returns:
+        The complete decoded JWT payload
+
+    Raises:
+        HTTPException: 401 if token is invalid or missing
+
+    Example:
+        ```python
+        @app.get("/api/user-info")
+        async def get_user_info(payload: dict = Depends(get_current_token_payload)):
+            return {"email": payload.get("email"), "user_id": payload.get("sub")}
+        ```
+    """
+    try:
+        token = credentials.credentials
+        payload = await verify_jwt_token(token)
+        return payload
+
+    except JWTVerificationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
