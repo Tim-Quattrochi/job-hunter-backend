@@ -4,6 +4,8 @@ Story 1.1: Implements Approach A (lazy profile creation).
 Profiles are created automatically on first access, granting 10 free swipes.
 """
 
+from __future__ import annotations
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

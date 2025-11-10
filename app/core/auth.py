@@ -11,13 +11,15 @@ This is a basic verification setup for testing purposes.
 
 from __future__ import annotations
 
-import httpx
-from jose import jwt, jwk
-from jose.exceptions import JWTError
-from typing import Dict, Any
+import time
 from functools import lru_cache
+from typing import Any, Dict
+
+import httpx
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import jwk, jwt
+from jose.exceptions import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,20 +57,27 @@ def get_jwks_uri() -> str:
     return f"https://api.stack-auth.com/api/v1/projects/{settings.stack_auth_project_id}/.well-known/jwks.json"
 
 
-async def fetch_jwks() -> Dict[str, Any]:
-    """Fetch the JSON Web Key Set (JWKS) from Stack Auth.
+_jwks_cache: Dict[str, Any] | None = None
+_jwks_cache_expiration: float | None = None
 
-    The JWKS contains the public keys used to verify JWT signatures.
-    This is cached to avoid unnecessary network requests.
 
-    Returns:
-        The JWKS as a dictionary.
+def clear_jwks_cache() -> None:
+    """Clear the in-memory JWKS cache (primarily for tests)."""
 
-    Raises:
-        StackAuthError: If fetching JWKS fails.
-    """
-    jwks_uri = get_jwks_uri()
+    global _jwks_cache, _jwks_cache_expiration
+    _jwks_cache = None
+    _jwks_cache_expiration = None
 
+
+def _is_cache_valid(ttl_seconds: int) -> bool:
+    if ttl_seconds <= 0:
+        return False
+    if _jwks_cache is None or _jwks_cache_expiration is None:
+        return False
+    return time.monotonic() < _jwks_cache_expiration
+
+
+async def _download_jwks(jwks_uri: str) -> Dict[str, Any]:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(jwks_uri, timeout=10.0)
@@ -76,6 +85,30 @@ async def fetch_jwks() -> Dict[str, Any]:
             return response.json()
     except httpx.HTTPError as e:
         raise StackAuthError(f"Failed to fetch JWKS: {e}") from e
+
+
+async def fetch_jwks(force_refresh: bool = False) -> Dict[str, Any]:
+    """Fetch the JSON Web Key Set (JWKS) from Stack Auth with TTL caching."""
+
+    global _jwks_cache, _jwks_cache_expiration
+
+    settings = get_settings()
+    ttl = settings.jwks_cache_ttl_seconds
+
+    if not force_refresh and _is_cache_valid(ttl):
+        return _jwks_cache  # type: ignore[return-value]
+
+    jwks_uri = get_jwks_uri()
+    jwks = await _download_jwks(jwks_uri)
+
+    if ttl > 0:
+        _jwks_cache = jwks
+        _jwks_cache_expiration = time.monotonic() + ttl
+    else:
+        _jwks_cache = None
+        _jwks_cache_expiration = None
+
+    return jwks
 
 
 async def verify_jwt_token(token: str) -> Dict[str, Any]:
