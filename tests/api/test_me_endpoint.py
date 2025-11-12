@@ -42,12 +42,11 @@ async def test_app() -> tuple:
         override_get_current_token_payload
     )
 
-    yield app, session_factory
-
-    app.dependency_overrides.clear()
-    await engine.dispose()
-
-
+    try:
+        yield app, session_factory
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
 @pytest.mark.asyncio
 async def test_lazy_profile_creation_creates_profile_when_missing(test_app: tuple) -> None:
     """Calling `/api/me` should create a profile when one does not exist."""
