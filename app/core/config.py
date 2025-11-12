@@ -28,6 +28,14 @@ class Settings:
         self.stack_auth_project_id: str | None = os.getenv("NEXT_PUBLIC_STACK_PROJECT_ID")
         self.stack_auth_secret_key: str | None = os.getenv("STACK_SECRET_SERVER_KEY")
         self._cors_origins_raw: str | None = os.getenv("CORS_ORIGINS")
+        try:
+            self.jwks_cache_ttl_seconds: int = int(
+                os.getenv("STACK_AUTH_JWKS_TTL_SECONDS", "300")
+            )
+        except ValueError as e:
+            raise ValueError(
+                "Invalid STACK_AUTH_JWKS_TTL_SECONDS value: must be an integer"
+            ) from e
 
     @property
     def cors_origins(self) -> List[str]:

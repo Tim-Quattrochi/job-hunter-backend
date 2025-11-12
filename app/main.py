@@ -79,6 +79,10 @@ app.include_router(db_health_router)
 auth_verify_router = create_auth_verify_router()
 app.include_router(auth_verify_router)
 
+# Story 1.1: Include user profile routes
+from app.api.routes.users import router as users_router
+app.include_router(users_router)
+
 @app.get("/", tags=["Health"])
 async def read_root() -> dict[str, str]:
     """Return basic API metadata for quick diagnostics."""

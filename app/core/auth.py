@@ -11,11 +11,15 @@ This is a basic verification setup for testing purposes.
 
 from __future__ import annotations
 
-import httpx
-from jose import jwt, jwk
-from jose.exceptions import JWTError
-from typing import Dict, Any
+import time
 from functools import lru_cache
+from typing import Any, Dict
+
+import httpx
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import jwk, jwt
+from jose.exceptions import JWTError
 
 from app.core.config import get_settings
 
@@ -51,20 +55,27 @@ def get_jwks_uri() -> str:
     return f"https://api.stack-auth.com/api/v1/projects/{settings.stack_auth_project_id}/.well-known/jwks.json"
 
 
-async def fetch_jwks() -> Dict[str, Any]:
-    """Fetch the JSON Web Key Set (JWKS) from Stack Auth.
+_jwks_cache: Dict[str, Any] | None = None
+_jwks_cache_expiration: float | None = None
 
-    The JWKS contains the public keys used to verify JWT signatures.
-    This is cached to avoid unnecessary network requests.
 
-    Returns:
-        The JWKS as a dictionary.
+def clear_jwks_cache() -> None:
+    """Clear the in-memory JWKS cache (primarily for tests)."""
 
-    Raises:
-        StackAuthError: If fetching JWKS fails.
-    """
-    jwks_uri = get_jwks_uri()
+    global _jwks_cache, _jwks_cache_expiration
+    _jwks_cache = None
+    _jwks_cache_expiration = None
 
+
+def _is_cache_valid(ttl_seconds: int) -> bool:
+    if ttl_seconds <= 0:
+        return False
+    if _jwks_cache is None or _jwks_cache_expiration is None:
+        return False
+    return time.monotonic() < _jwks_cache_expiration
+
+
+async def _download_jwks(jwks_uri: str) -> Dict[str, Any]:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(jwks_uri, timeout=10.0)
@@ -72,6 +83,30 @@ async def fetch_jwks() -> Dict[str, Any]:
             return response.json()
     except httpx.HTTPError as e:
         raise StackAuthError(f"Failed to fetch JWKS: {e}") from e
+
+
+async def fetch_jwks(force_refresh: bool = False) -> Dict[str, Any]:
+    """Fetch the JSON Web Key Set (JWKS) from Stack Auth with TTL caching."""
+
+    global _jwks_cache, _jwks_cache_expiration
+
+    settings = get_settings()
+    ttl = settings.jwks_cache_ttl_seconds
+
+    if not force_refresh and _is_cache_valid(ttl):
+        return _jwks_cache  # type: ignore[return-value]
+
+    jwks_uri = get_jwks_uri()
+    jwks = await _download_jwks(jwks_uri)
+
+    if ttl > 0:
+        _jwks_cache = jwks
+        _jwks_cache_expiration = time.monotonic() + ttl
+    else:
+        _jwks_cache = None
+        _jwks_cache_expiration = None
+
+    return jwks
 
 
 async def verify_jwt_token(token: str) -> Dict[str, Any]:
@@ -181,3 +216,93 @@ def extract_bearer_token(authorization_header: str | None) -> str:
         )
 
     return parts[1]
+
+
+# Story 1.1: FastAPI Dependencies for Protected Endpoints
+
+# HTTP Bearer security scheme for Swagger UI
+security = HTTPBearer()
+
+
+async def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
+    """FastAPI dependency to get the current authenticated user ID.
+
+    This dependency:
+    1. Extracts the JWT token from the Authorization header
+    2. Verifies the token using Stack Auth's JWKS
+    3. Returns the user ID from the token's 'sub' claim
+
+    Args:
+        credentials: HTTP Bearer credentials from the Authorization header
+
+    Returns:
+        The user ID (from JWT 'sub' claim)
+
+    Raises:
+        HTTPException: 401 if token is invalid or missing
+
+    Example:
+        ```python
+        @app.get("/api/me")
+        async def get_me(user_id: str = Depends(get_current_user_id)):
+            return {"user_id": user_id}
+        ```
+    """
+    try:
+        token = credentials.credentials
+        payload = await verify_jwt_token(token)
+        user_id = payload.get("sub")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token missing 'sub' (user ID) claim",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return user_id
+
+    except JWTVerificationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+async def get_current_token_payload(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> Dict[str, Any]:
+    """FastAPI dependency to get the full JWT payload.
+
+    Use this when you need access to additional token claims beyond just the user ID.
+
+    Args:
+        credentials: HTTP Bearer credentials from the Authorization header
+
+    Returns:
+        The complete decoded JWT payload
+
+    Raises:
+        HTTPException: 401 if token is invalid or missing
+
+    Example:
+        ```python
+        @app.get("/api/user-info")
+        async def get_user_info(payload: dict = Depends(get_current_token_payload)):
+            return {"email": payload.get("email"), "user_id": payload.get("sub")}
+        ```
+    """
+    try:
+        token = credentials.credentials
+        payload = await verify_jwt_token(token)
+        return payload
+
+    except JWTVerificationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
