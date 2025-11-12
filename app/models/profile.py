@@ -1,6 +1,5 @@
 """User profile model for storing additional user data beyond Stack Auth."""
 
-from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, DateTime
 from sqlalchemy.sql import func
 
