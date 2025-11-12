@@ -58,10 +58,11 @@ async def get_current_user(
             profile=UserProfileResponse.model_validate(profile),
         )
 
-    except Exception as e:
+    except Exception:
+        # Consider logging the full exception here for debugging purposes
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve or create profile: {str(e)}",
+            detail="Failed to retrieve or create profile.",
         )
 
 
