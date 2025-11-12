@@ -24,7 +24,7 @@ class UserProfile(Base):
     __tablename__ = "profiles"
 
     user_id = Column(
-        String,
+        String(255),
         primary_key=True,
         comment="Stack Auth user ID from JWT 'sub' claim",
     )
