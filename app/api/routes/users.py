@@ -11,7 +11,6 @@ from app.main import get_db
 from app.services.profile_service import (
     get_or_create_profile,
     get_profile,
-    ProfileNotFoundError,
 )
 from app.schemas.auth import UserProfileResponse, CurrentUserResponse
 
