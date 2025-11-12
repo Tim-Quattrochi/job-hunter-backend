@@ -108,7 +108,7 @@ async def get_user_profile(
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Profile not found for user_id: {user_id}",
+            detail="Profile not found",
         )
 
     return UserProfileResponse.model_validate(profile)
