@@ -7,6 +7,7 @@ Profiles are created automatically on first access, granting 10 free swipes.
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.profile import UserProfile
@@ -65,10 +66,25 @@ async def get_or_create_profile(
     )
 
     db.add(profile)
-    await db.commit()
-    await db.refresh(profile)
-
-    return profile
+    
+    try:
+        await db.commit()
+        await db.refresh(profile)
+        return profile
+    except IntegrityError:
+        # Another request created the profile concurrently
+        # Roll back and retry fetch
+        await db.rollback()
+        result = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+        profile = result.scalar_one_or_none()
+        
+        if profile:
+            return profile
+        
+        # This should be extremely rare - profile was created and deleted
+        raise ProfileNotFoundError(
+            f"Profile creation failed due to race condition for user_id: {user_id}"
+        )
 
 
 async def get_profile(db: AsyncSession, user_id: str) -> UserProfile | None:
